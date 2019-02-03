@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/news")
 public class NewsController {
     @Reference
-    QqNewsSearch qqNewsSearch;
+    private QqNewsSearch qqNewsSearch;
 
     @Value("${dubbo.application.name}")
     private String a;

@@ -1,6 +1,7 @@
 package com.wnc.dubbo.news.qq.service;
 
 import com.alibaba.dubbo.config.annotation.Service;
+import com.alibaba.fastjson.JSONObject;
 import com.crawl.core.util.HttpClientUtil;
 import com.wnc.dubbo.spider.news.qq.api.AbstractSpiderExecutor;
 import com.wnc.dubbo.spider.news.qq.api.QqNewsSpider;
@@ -14,7 +15,7 @@ public class QqNewsSpiderImpl extends AbstractSpiderExecutor implements QqNewsSp
 
     @Override
     public SpiderTaskResult doTask() {
-        System.out.println("QqNewsSpiderImpl doTask..");
+        System.out.println("QqNewsSpiderImpl doTask.." + JSONObject.toJSONString(this, true));
         try {
             String webPage = HttpClientUtil.getWebPage("http://www.baidu.com");
             System.out.println(webPage);

@@ -56,6 +56,17 @@
             <groupId>com.wnc.dubbo</groupId>
             <artifactId>qqnews-api</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.wnc</groupId>
+            <artifactId>myjar</artifactId>
+            <version>2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.wnc</groupId>
+            <artifactId>myspider</artifactId>
+            <version>1.2</version>
+        </dependency>
     </dependencies>
 
     <build>

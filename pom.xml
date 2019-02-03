@@ -57,5 +57,6 @@
         <module>news-web</module>
         <module>qqnews-api</module>
         <module>qqnews-service</module>
+        <module>spider-parent</module>
     </modules>
 </project>

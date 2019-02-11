@@ -1,17 +1,24 @@
 
-package com.wnc.dubbo.news.qq;
+package com.wnc.dubbo.news.qq.task;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.crawl.spider.entity.Page;
 import com.crawl.spider.task.AbstractPageTask;
+import com.crawl.spider.task.TaskConsts;
+import com.crawl.spider.task.retry.RetryConstruct;
+import com.crawl.spider.task.retry.RetryConstructParam;
+import com.wnc.dubbo.news.qq.QqArticleManager;
+import com.wnc.dubbo.news.qq.QqNewsUtil;
+import com.wnc.dubbo.news.qq.QqSpiderClient;
+import com.wnc.dubbo.news.qq.QqUserManager;
+import com.wnc.dubbo.news.qq.QqUserMetaManager;
 import com.wnc.dubbo.news.qq.user.UserStat;
 import com.wnc.dubbo.news.qq.user.UserStatFileUtil;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 找出两个月之间的
@@ -27,23 +34,19 @@ public class QqUserTask extends AbstractPageTask
     private UserStat userStat;
     private int uCmtListSize;
 
-    private boolean ignoreComp = false;
     /**
      * 需要大量的文章和用户数据的时候才开启
      */
     private boolean pullBigData = false;
-    static
-    {
-        retryMap.put( QqUserTask.class,
-                new ConcurrentHashMap<String, Integer>() );
-    }
 
     public QqUserTask( UserStat userStat,boolean pullBigData )
     {
         this( userStat, "0", pullBigData );
     }
 
-    public QqUserTask(UserStat userStat, String cursor, boolean pullBigData )
+    @RetryConstruct
+    public QqUserTask(@RetryConstructParam("userStat") UserStat userStat,
+                             @RetryConstructParam("cursor") String cursor, @RetryConstructParam("pullBigData") boolean pullBigData )
     {
         this.userStat = userStat;
         this.uid = userStat.getId();
@@ -53,15 +56,7 @@ public class QqUserTask extends AbstractPageTask
                 System.currentTimeMillis() );
         this.proxyFlag = true;
 
-        this.MAX_RETRY_TIMES = 20;
-
         request = new HttpGet( url );
-    }
-
-    public QqUserTask setMaxRetryTimes( int tm )
-    {
-        this.MAX_RETRY_TIMES = tm;
-        return this;
     }
 
     @Override
@@ -106,7 +101,7 @@ public class QqUserTask extends AbstractPageTask
             if ( pullBigData && hasNext && mustPullMore )
             {
                 nextJob( dataObject.getString( "last" ) );
-                ignoreComp = true;
+                ignoreComplete = true;
             }
             // else if ( "false".equals( dataObject.getString( "first" ) ) )
             // {
@@ -115,13 +110,13 @@ public class QqUserTask extends AbstractPageTask
             // {
             // // 无记录, 记作错误日志
             // complete( 99, "用户评论列表空白" );
-            // ignoreComp = true;
+            // ignoreComplete = true;
             // }
             // }
         } else
         {
             complete( errCode + 10000, "出错:errCode=" + errCode );
-            ignoreComp = true;
+            ignoreComplete = true;
         }
 
     }
@@ -167,21 +162,17 @@ public class QqUserTask extends AbstractPageTask
     protected void errLog404( Page page )
     {
         retryMonitor( "404 continue..." );
-        ignoreComp = true;
+        ignoreComplete = true;
     }
 
     @Override
     protected void complete( int type, String msg )
     {
-        if ( ignoreComp )
-        {
-            return;
-        }
         try
         {
             super.complete( type, msg );
 
-            if ( type != COMPLETE_STATUS_SUCCESS )
+            if ( type != TaskConsts.COMPLETE_STATUS_SUCCESS )
             {
                 logger.error( "用户" + uid + "在" + url + "失败, 失败原因:" + msg );
                 QqNewsUtil.errUser( "用户:" + uid + "在" + url + "失败, 失败原因:" + msg
@@ -277,7 +268,7 @@ public class QqUserTask extends AbstractPageTask
     /**
      * 设置UserStat的相关属性
      * 
-     * @param umetaJO
+     * @param dataObject
      */
     private void rebuildUserStat( JSONObject dataObject )
     {

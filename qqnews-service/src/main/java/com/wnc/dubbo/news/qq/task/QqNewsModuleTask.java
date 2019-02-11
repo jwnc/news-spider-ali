@@ -1,20 +1,26 @@
 
-package com.wnc.dubbo.news.qq;
+package com.wnc.dubbo.news.qq.task;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.crawl.spider.entity.Page;
 import com.crawl.spider.task.AbstractPageTask;
+import com.crawl.spider.task.TaskConsts;
+import com.crawl.spider.task.retry.RetryConstruct;
+import com.crawl.spider.task.retry.RetryConstructParam;
 import com.wnc.basic.BasicDateUtil;
 import com.wnc.basic.BasicFileUtil;
+import com.wnc.dubbo.news.qq.NewsModule;
+import com.wnc.dubbo.news.qq.NewsPageUrlGenerator;
+import com.wnc.dubbo.news.qq.QqConsts;
+import com.wnc.dubbo.news.qq.QqModuleIdsManager;
+import com.wnc.dubbo.news.qq.QqNewsUtil;
+import com.wnc.dubbo.news.qq.QqSpiderClient;
+import com.wnc.dubbo.news.qq.SpringContextUtils;
 import com.wnc.dubbo.news.qq.service.QqDbService;
-import com.wnc.sboot1.SpringContextUtils;
-import com.wnc.wynews.model.NewsModule;
-import com.wnc.wynews.utils.NewsPageUrlGenerator;
 import org.apache.http.client.methods.HttpGet;
 
 import java.util.Date;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 项目初始化, 拉取之前的新闻数据到本地 2018-07-26 12:00:00
@@ -28,23 +34,18 @@ public class QqNewsModuleTask extends AbstractPageTask
     // 以首个任务开始请求接口时的时间为准, 而不是初始化提交到线程池时为准
     // 在重试和下一个任务时, beginSpyDate会一直流转下去
     private Date beginSpyDate;
-    private boolean ignoreComp = false;
-    static
-    {
-        retryMap.put( QqNewsModuleTask.class,
-                new ConcurrentHashMap<String, Integer>() );
-    }
 
     public QqNewsModuleTask( NewsModule newsModule )
     {
         this( newsModule, 0, null );
     }
 
-    public QqNewsModuleTask( NewsModule newsModule,int pageIdx,
-            Date beginSpyDate )
+    @RetryConstruct
+    public QqNewsModuleTask( @RetryConstructParam("newsModule") NewsModule newsModule,
+                     @RetryConstructParam("pageIdx") int pageIdx, @RetryConstructParam("beginSpyDate")
+                                 Date beginSpyDate )
     {
-        this.MAX_RETRY_TIMES = 20;
-        pageEncoding = "GBK";
+        pageEncoding = TaskConsts.CHARSET_GBK;
 
         this.newsModule = newsModule;
         this.pageIdx = pageIdx;
@@ -70,12 +71,6 @@ public class QqNewsModuleTask extends AbstractPageTask
         super.run();
     }
 
-    public QqNewsModuleTask setMaxRetryTimes( int tm )
-    {
-        this.MAX_RETRY_TIMES = tm;
-        return this;
-    }
-
     @Override
     protected void retry()
     {
@@ -95,14 +90,14 @@ public class QqNewsModuleTask extends AbstractPageTask
         {
             // 下一页任务
             nextJob();
-            ignoreComp = true;
+            ignoreComplete = true;
         }
         // 处理当前页的数据
         dealCurrentPageNews( jsonArray );
         // 如果不需要加载下一页, 则完成任务, 自动调用complete
         if ( !mustPullMore )
         {
-            ignoreComp = false;
+            ignoreComplete = false;
         }
 
     }
@@ -112,7 +107,7 @@ public class QqNewsModuleTask extends AbstractPageTask
     {
         // 假的404. 和代理有关, 重试
         retryMonitor( page.getStatusCode() + " continue..." );
-        ignoreComp = true;
+        ignoreComplete = true;
     }
 
     @Override
@@ -132,17 +127,13 @@ public class QqNewsModuleTask extends AbstractPageTask
     @Override
     protected void complete( int type, String msg )
     {
-        if ( ignoreComp )
-        {
-            return;
-        }
         try
         {
             super.complete( type, msg );
 
             String name = newsModule.getName();
 
-            if ( type != COMPLETE_STATUS_SUCCESS )
+            if ( type != TaskConsts.COMPLETE_STATUS_SUCCESS )
             {
                 QqNewsUtil.err( newsModule,
                         name + "在" + url + "失败, 失败原因:" + msg );

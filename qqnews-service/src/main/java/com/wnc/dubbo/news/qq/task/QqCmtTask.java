@@ -1,21 +1,25 @@
 
-package com.wnc.dubbo.news.qq;
+package com.wnc.dubbo.news.qq.task;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.crawl.spider.entity.Page;
 import com.crawl.spider.task.AbstractPageTask;
+import com.crawl.spider.task.TaskConsts;
+import com.crawl.spider.task.retry.RetryConstruct;
+import com.crawl.spider.task.retry.RetryConstructParam;
 import com.wnc.basic.BasicFileUtil;
+import com.wnc.dubbo.news.qq.NewsModule;
+import com.wnc.dubbo.news.qq.QqNewsUtil;
+import com.wnc.dubbo.news.qq.QqSpiderClient;
+import com.wnc.dubbo.news.qq.SpringContextUtils;
 import com.wnc.dubbo.news.qq.jpa.entity.QqUser;
 import com.wnc.dubbo.news.qq.service.QqDbService;
-import com.wnc.sboot1.SpringContextUtils;
-import com.wnc.wynews.model.NewsModule;
 import org.apache.http.client.methods.HttpGet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 找出两个月之间的
@@ -31,18 +35,14 @@ public class QqCmtTask extends AbstractPageTask {
     private NewsModule newsModule;
     private int cmtListSize;
     private QqDbService qqDbService = (QqDbService) SpringContextUtils.getContext().getBean("qqDbService");
-    private boolean ignoreComp = false;
-
-    static {
-        retryMap.put(QqCmtTask.class,
-                new ConcurrentHashMap<String, Integer>());
-    }
 
     public QqCmtTask(NewsModule newsModule, String code) {
         this(newsModule, code, "0");
     }
 
-    public QqCmtTask(NewsModule newsModule, String code, String cursor) {
+    @RetryConstruct
+    public QqCmtTask(@RetryConstructParam("newsModule") NewsModule newsModule,
+                     @RetryConstructParam("code") String code, @RetryConstructParam("cursor") String cursor) {
         this.newsModule = newsModule;
         this.code = code;
         this.cursor = cursor;
@@ -51,14 +51,7 @@ public class QqCmtTask extends AbstractPageTask {
                 System.currentTimeMillis());
         this.proxyFlag = true;
 
-        this.MAX_RETRY_TIMES = 20;
-
         request = new HttpGet(url);
-    }
-
-    public QqCmtTask setMaxRetryTimes(int tm) {
-        this.MAX_RETRY_TIMES = tm;
-        return this;
     }
 
     @Override
@@ -67,16 +60,10 @@ public class QqCmtTask extends AbstractPageTask {
     }
 
     @Override
-    protected void retry() {
-        QqSpiderClient.getInstance()
-                .submitTask(new QqCmtTask(newsModule, code, cursor));
-    }
-
-    @Override
     protected void handle(Page page) throws Exception {
         if (page.getHtml().contains("<html>") && page.getHtml().contains("login_form")) {
             retryMonitor("需要登陆,重试:" + this.url);
-            ignoreComp = true;
+            ignoreComplete = true;
             return ;
         }
 
@@ -99,18 +86,18 @@ public class QqCmtTask extends AbstractPageTask {
             }
             if (hasNext) {
                 nextJob(dataObject.getString("last"));
-                ignoreComp = true;
+                ignoreComplete = true;
             } else if ("false".equals(dataObject.getString("first"))) {
                 // 如果是首页, 且列表为空
                 if (intValue == 0) {
                     // 无记录, 记作错误日志
                     complete(99, "评论列表空白");
-                    ignoreComp = true;
+                    ignoreComplete = true;
                 }
             }
         } else {
             complete(errCode + 10000, "出错:errCode=" + errCode);
-            ignoreComp = true;
+            ignoreComplete = true;
         }
 
     }
@@ -130,7 +117,7 @@ public class QqCmtTask extends AbstractPageTask {
     @Override
     protected void errLog404(Page page) {
         retryMonitor("404 continue...");
-        ignoreComp = true;
+        ignoreComplete = true;
     }
 
     private void outputCmtData(JSONObject dataObject) {
@@ -170,13 +157,10 @@ public class QqCmtTask extends AbstractPageTask {
 
     @Override
     protected void complete(int type, String msg) {
-        if (ignoreComp) {
-            return;
-        }
         try {
             super.complete(type, msg);
 
-            if (type != COMPLETE_STATUS_SUCCESS) {
+            if (type != TaskConsts.COMPLETE_STATUS_SUCCESS) {
                 logger.error(code + "在" + url + "失败, 失败原因:" + msg);
                 QqNewsUtil.err(newsModule, code + "在" + url + "失败, 失败原因:" + msg
                         + " 应抓取总数:" + cmtListSize);

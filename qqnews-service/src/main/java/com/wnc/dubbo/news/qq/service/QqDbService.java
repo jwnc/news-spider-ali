@@ -58,16 +58,16 @@ public class QqDbService {
         try {
             QqNews qqNews = JSONObject.parseObject(news.toJSONString(), QqNews.class).cvtAll();
             if(qqNews.getTagLabelList() != null){
-                qNewsTagLabelRepository.save(qqNews.getTagLabelList());
+                qNewsTagLabelRepository.saveAll(qqNews.getTagLabelList());
             }
             if(qqNews.getKeywordList() != null){
-                qqNewsKeyWordRepository.save(qqNews.getKeywordList());
+                qqNewsKeyWordRepository.saveAll(qqNews.getKeywordList());
             }
 
             qqNewsRepository.save(qqNews);
 
             if (qqNews.getIrsImgList() != null) {
-                qqNewsImgRepository.save(qqNews.getIrsImgList());
+                qqNewsImgRepository.saveAll(qqNews.getIrsImgList());
             }
         } catch (Exception e) {
             logger.error(news.toJSONString() + " 插入QQ新闻失败!", e);
